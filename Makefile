@@ -1823,3 +1823,4 @@ endif
 	@$(KSRC)/scripts/sign-file sha256 MOK.priv MOK.der 88XXau.ko
 
 sign-install: all sign install
+

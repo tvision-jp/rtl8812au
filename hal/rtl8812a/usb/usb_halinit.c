@@ -2413,91 +2413,93 @@ void UpdateInterruptMask8812AU(PADAPTER padapter, u8 bHIMR0 , u32 AddMSR, u32 Re
 
 u8 SetHwReg8812AU(PADAPTER Adapter, u8 variable, u8 *val)
 {
-	HAL_DATA_TYPE	*pHalData = GET_HAL_DATA(Adapter);
-	struct pwrctrl_priv *pwrctl = adapter_to_pwrctl(Adapter);
-	struct registry_priv *registry_par = &Adapter->registrypriv;
-	u8 ret = _SUCCESS;
+    HAL_DATA_TYPE *pHalData = GET_HAL_DATA(Adapter);
+    struct pwrctrl_priv *pwrctl = adapter_to_pwrctl(Adapter);
+    struct registry_priv *registry_par = &Adapter->registrypriv;
+    u8 ret = _SUCCESS;
 
-	switch (variable) {
-	case HW_VAR_RXDMA_AGG_PG_TH:
+    if (val == NULL) {
+        return _FAIL;
+    }
+
+    switch (variable) {
+    case HW_VAR_RXDMA_AGG_PG_TH:
 #ifdef CONFIG_USB_RX_AGGREGATION
-		{
-			/*u8	threshold = *((u8 *)val);
-			if( threshold == 0)
-			{
-				threshold = pHalData->UsbRxAggPageCount;
-			}
-			rtw_write8(Adapter, REG_RXDMA_AGG_PG_TH, threshold);*/
-		}
+        {
+            /*u8 threshold = *((u8 *)val);
+            if (threshold == 0) {
+                threshold = pHalData->UsbRxAggPageCount;
+            }
+            rtw_write8(Adapter, REG_RXDMA_AGG_PG_TH, threshold);*/
+        }
 #endif
-		break;
-	case HW_VAR_SET_RPWM:
+        break;
+    case HW_VAR_SET_RPWM:
 #ifdef CONFIG_LPS_LCLK
-		{
-			u8	ps_state = *((u8 *)val);
+        {
+            u8 ps_state = *((u8 *)val);
 
-			/*rpwm value only use BIT0(clock bit) ,BIT6(Ack bit), and BIT7(Toggle bit) for 88e.
-			BIT0 value - 1: 32k, 0:40MHz.
-			BIT6 value - 1: report cpwm value after success set, 0:do not report.
-			BIT7 value - Toggle bit change.
-			modify by Thomas. 2012/4/2.*/
-			ps_state = ps_state & 0xC1;
-			/*RTW_INFO("##### Change RPWM value to = %x for switch clk #####\n", ps_state);*/
-			rtw_write8(Adapter, REG_USB_HRPWM, ps_state);
-		}
+            /* rpwm value only use BIT0(clock bit), BIT6(Ack bit), and BIT7(Toggle bit).
+               BIT0 value - 1: 32k, 0:40MHz.
+               BIT6 value - 1: report cpwm value after success set, 0:do not report.
+               BIT7 value - Toggle bit change
+               modify by Thomas. 2012/4/2. */
+            ps_state = ps_state & 0xC1;
+            /* RTW_INFO("##### Change RPWM value to = %x for switch clk #####\n", ps_state); */
+            rtw_write8(Adapter, REG_USB_HRPWM, ps_state);
+        }
 #endif
 #ifdef CONFIG_AP_WOWLAN
-		if (pwrctl->wowlan_ap_mode == _TRUE) {
-			u8	ps_state = *((u8 *)val);
+        if (pwrctl->wowlan_ap_mode == _TRUE) {
+            u8 ps_state = *((u8 *)val);
 
-			RTW_INFO("%s, RPWM\n", __func__);
-			ps_state = ps_state & 0xC1;
-			rtw_write8(Adapter, REG_USB_HRPWM, ps_state);
-		}
+            RTW_INFO("%s, RPWM\n", __func__);
+            ps_state = ps_state & 0xC1;
+            rtw_write8(Adapter, REG_USB_HRPWM, ps_state);
+        }
 #endif
-		break;
+        break;
+    case HW_VAR_USB_MODE:
+        /* U2 to U3 */
+        if (registry_par->switch_usb_mode == 1) {
+            if (IS_HIGH_SPEED_USB(Adapter)) {
+                if ((rtw_read8(Adapter, 0x74) & (BIT(2) | BIT(3))) != BIT(3)) {
+                    rtw_write8(Adapter, 0x74, 0x8);
+                    rtw_write8(Adapter, 0x70, 0x2);
+                    rtw_write8(Adapter, 0x3e, 0x1);
+                    rtw_write8(Adapter, 0x3d, 0x3);
+                    /* usb disconnect */
+                    rtw_write8(Adapter, 0x5, 0x80);
+                    *val = _TRUE;
+                }
+            } else if (IS_SUPER_SPEED_USB(Adapter)) {
+                rtw_write8(Adapter, 0x70, rtw_read8(Adapter, 0x70) & (~BIT(1)));
+                rtw_write8(Adapter, 0x3e, rtw_read8(Adapter, 0x3e) & (~BIT(0)));
+            }
+        } else if (registry_par->switch_usb_mode == 2) {
+            /* U3 to U2 */
+            if (IS_SUPER_SPEED_USB(Adapter)) {
+                if ((rtw_read8(Adapter, 0x74) & (BIT(2) | BIT(3))) != BIT(2)) {
+                    rtw_write8(Adapter, 0x74, 0x4);
+                    rtw_write8(Adapter, 0x70, 0x2);
+                    rtw_write8(Adapter, 0x3e, 0x1);
+                    rtw_write8(Adapter, 0x3d, 0x3);
+                    /* usb disconnect */
+                    rtw_write8(Adapter, 0x5, 0x80);
+                    *val = _TRUE;
+                }
+            } else if (IS_HIGH_SPEED_USB(Adapter)) {
+                rtw_write8(Adapter, 0x70, rtw_read8(Adapter, 0x70) & (~BIT(1)));
+                rtw_write8(Adapter, 0x3e, rtw_read8(Adapter, 0x3e) & (~BIT(0)));
+            }
+        }
+        break;
+    default:
+        ret = SetHwReg8812A(Adapter, variable, val);
+        break;
+    }
 
-	case HW_VAR_USB_MODE:
-		/* U2 to U3 */
-		if (registry_par->switch_usb_mode == 1) {
-			if (IS_HIGH_SPEED_USB(Adapter)) {
-				if ((rtw_read8(Adapter, 0x74) & (BIT(2) | BIT(3))) != BIT(3)) {
-					rtw_write8(Adapter, 0x74, 0x8);
-					rtw_write8(Adapter, 0x70, 0x2);
-					rtw_write8(Adapter, 0x3e, 0x1);
-					rtw_write8(Adapter, 0x3d, 0x3);
-					/* usb disconnect */
-					rtw_write8(Adapter, 0x5, 0x80);
-					*val = _TRUE;
-				}
-			} else if (IS_SUPER_SPEED_USB(Adapter)) {
-				rtw_write8(Adapter, 0x70, rtw_read8(Adapter, 0x70) & (~BIT(1)));
-				rtw_write8(Adapter, 0x3e, rtw_read8(Adapter, 0x3e) & (~BIT(0)));
-			}
-		} else if (registry_par->switch_usb_mode == 2) {
-			/* U3 to U2 */
-			if (IS_SUPER_SPEED_USB(Adapter)) {
-				if ((rtw_read8(Adapter, 0x74) & (BIT(2) | BIT(3))) != BIT(2)) {
-					rtw_write8(Adapter, 0x74, 0x4);
-					rtw_write8(Adapter, 0x70, 0x2);
-					rtw_write8(Adapter, 0x3e, 0x1);
-					rtw_write8(Adapter, 0x3d, 0x3);
-					/* usb disconnect */
-					rtw_write8(Adapter, 0x5, 0x80);
-					*val = _TRUE;
-				}
-			} else if (IS_HIGH_SPEED_USB(Adapter)) {
-				rtw_write8(Adapter, 0x70, rtw_read8(Adapter, 0x70) & (~BIT(1)));
-				rtw_write8(Adapter, 0x3e, rtw_read8(Adapter, 0x3e) & (~BIT(0)));
-			}
-		}
-		break;
-	default:
-		ret = SetHwReg8812A(Adapter, variable, val);
-		break;
-	}
-
-	return ret;
+    return ret;
 }
 
 void GetHwReg8812AU(PADAPTER Adapter, u8 variable, u8 *val)
@@ -2714,3 +2716,4 @@ void rtl8812au_set_hal_ops(_adapter *padapter)
 	rtl8812_set_hal_ops(pHalFunc);
 
 }
+

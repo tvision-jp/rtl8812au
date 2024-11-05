@@ -10,3 +10,7 @@ modules.order
 *.mod
 *.o.d
 *.c.orig 
+.DS_Store
+.idea/
+.vscode/
+

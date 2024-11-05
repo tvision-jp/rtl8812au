@@ -2134,6 +2134,7 @@ void UpdateInterruptMask8814AU(PADAPTER padapter,u8 bHIMR0 ,u32 AddMSR, u32 Remo
 
 u8 SetHwReg8814AU(PADAPTER Adapter, u8 variable, u8* val)
 {
+	printk(KERN_INFO "SetHwReg8814AU called \n");
 	HAL_DATA_TYPE	*pHalData = GET_HAL_DATA(Adapter);
 	struct pwrctrl_priv *pwrctl = adapter_to_pwrctl(Adapter);
 	struct registry_priv *registry_par = &Adapter->registrypriv;
@@ -2413,4 +2414,5 @@ void rtl8814au_set_hal_ops(_adapter * padapter)
 	rtl8814_set_hal_ops(pHalFunc);
 
 }
+
 
