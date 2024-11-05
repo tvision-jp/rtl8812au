@@ -1530,153 +1530,155 @@ int WMM_param_handler(_adapter *padapter, PNDIS_802_11_VARIABLE_IEs	pIE)
 
 void WMMOnAssocRsp(_adapter *padapter)
 {
-	u8	ACI, ACM, AIFS, ECWMin, ECWMax, aSifsTime;
-	u8	acm_mask;
-	u16	TXOP;
-	u32	acParm, i;
-	u32	edca[4], inx[4];
-	struct mlme_ext_priv	*pmlmeext = &padapter->mlmeextpriv;
-	struct mlme_ext_info	*pmlmeinfo = &(pmlmeext->mlmext_info);
-	struct xmit_priv		*pxmitpriv = &padapter->xmitpriv;
-	struct registry_priv	*pregpriv = &padapter->registrypriv;
+    u8 ACI, ACM, AIFS, ECWMin, ECWMax, aSifsTime;
+    u8 acm_mask;
+    u16 TXOP;
+    u32 acParm, i;
+    u32 edca[4], inx[4];
+    struct mlme_ext_priv *pmlmeext = &padapter->mlmeextpriv;
+    struct mlme_ext_info *pmlmeinfo = &(pmlmeext->mlmext_info);
+    struct xmit_priv *pxmitpriv = &padapter->xmitpriv;
+    struct registry_priv *pregpriv = &padapter->registrypriv;
 #ifdef CONFIG_WMMPS_STA
-	struct mlme_priv	*pmlmepriv = &(padapter->mlmepriv);
-	struct qos_priv	*pqospriv = &pmlmepriv->qospriv;
-#endif /* CONFIG_WMMPS_STA */	
-
-	acm_mask = 0;
-
-	if (is_supported_5g(pmlmeext->cur_wireless_mode) ||
-	    (pmlmeext->cur_wireless_mode & WIRELESS_11_24N))
-		aSifsTime = 16;
-	else
-		aSifsTime = 10;
-
-	if (pmlmeinfo->WMM_enable == 0) {
-		padapter->mlmepriv.acm_mask = 0;
-
-		AIFS = aSifsTime + (2 * pmlmeinfo->slotTime);
-
-		if (pmlmeext->cur_wireless_mode & (WIRELESS_11G | WIRELESS_11A)) {
-			ECWMin = 4;
-			ECWMax = 10;
-		} else if (pmlmeext->cur_wireless_mode & WIRELESS_11B) {
-			ECWMin = 5;
-			ECWMax = 10;
-		} else {
-			ECWMin = 4;
-			ECWMax = 10;
-		}
-
-		TXOP = 0;
-		acParm = AIFS | (ECWMin << 8) | (ECWMax << 12) | (TXOP << 16);
-		rtw_hal_set_hwreg(padapter, HW_VAR_AC_PARAM_BE, (u8 *)(&acParm));
-		rtw_hal_set_hwreg(padapter, HW_VAR_AC_PARAM_BK, (u8 *)(&acParm));
-		rtw_hal_set_hwreg(padapter, HW_VAR_AC_PARAM_VI, (u8 *)(&acParm));
-
-		ECWMin = 2;
-		ECWMax = 3;
-		TXOP = 0x2f;
-		acParm = AIFS | (ECWMin << 8) | (ECWMax << 12) | (TXOP << 16);
-		rtw_hal_set_hwreg(padapter, HW_VAR_AC_PARAM_VO, (u8 *)(&acParm));
-	} else {
-		edca[0] = edca[1] = edca[2] = edca[3] = 0;
-
-		for (i = 0; i < 4; i++) {
-			ACI = (pmlmeinfo->WMM_param.ac_param[i].ACI_AIFSN >> 5) & 0x03;
-			ACM = (pmlmeinfo->WMM_param.ac_param[i].ACI_AIFSN >> 4) & 0x01;
-
-			/* AIFS = AIFSN * slot time + SIFS - r2t phy delay */
-			AIFS = (pmlmeinfo->WMM_param.ac_param[i].ACI_AIFSN & 0x0f) * pmlmeinfo->slotTime + aSifsTime;
-
-			ECWMin = (pmlmeinfo->WMM_param.ac_param[i].CW & 0x0f);
-			ECWMax = (pmlmeinfo->WMM_param.ac_param[i].CW & 0xf0) >> 4;
-			TXOP = le16_to_cpu(pmlmeinfo->WMM_param.ac_param[i].TXOP_limit);
-
-			acParm = AIFS | (ECWMin << 8) | (ECWMax << 12) | (TXOP << 16);
-
-			switch (ACI) {
-			case 0x0:
-				rtw_hal_set_hwreg(padapter, HW_VAR_AC_PARAM_BE, (u8 *)(&acParm));
-				acm_mask |= (ACM ? BIT(1) : 0);
-				edca[XMIT_BE_QUEUE] = acParm;
-				break;
-
-			case 0x1:
-				rtw_hal_set_hwreg(padapter, HW_VAR_AC_PARAM_BK, (u8 *)(&acParm));
-				/* acm_mask |= (ACM? BIT(0):0); */
-				edca[XMIT_BK_QUEUE] = acParm;
-				break;
-
-			case 0x2:
-				rtw_hal_set_hwreg(padapter, HW_VAR_AC_PARAM_VI, (u8 *)(&acParm));
-				acm_mask |= (ACM ? BIT(2) : 0);
-				edca[XMIT_VI_QUEUE] = acParm;
-				break;
-
-			case 0x3:
-				rtw_hal_set_hwreg(padapter, HW_VAR_AC_PARAM_VO, (u8 *)(&acParm));
-				acm_mask |= (ACM ? BIT(3) : 0);
-				edca[XMIT_VO_QUEUE] = acParm;
-				break;
-			}
-
-			RTW_INFO("WMM(%x): %x, %x\n", ACI, ACM, acParm);
-		}
-
-		if (padapter->registrypriv.acm_method == 1)
-			rtw_hal_set_hwreg(padapter, HW_VAR_ACM_CTRL, (u8 *)(&acm_mask));
-		else
-			padapter->mlmepriv.acm_mask = acm_mask;
-
-		inx[0] = 0;
-		inx[1] = 1;
-		inx[2] = 2;
-		inx[3] = 3;
-
-		if (pregpriv->wifi_spec == 1) {
-			u32	j, tmp, change_inx = _FALSE;
-
-			/* entry indx: 0->vo, 1->vi, 2->be, 3->bk. */
-			for (i = 0; i < 4; i++) {
-				for (j = i + 1; j < 4; j++) {
-					/* compare CW and AIFS */
-					if ((edca[j] & 0xFFFF) < (edca[i] & 0xFFFF))
-						change_inx = _TRUE;
-					else if ((edca[j] & 0xFFFF) == (edca[i] & 0xFFFF)) {
-						/* compare TXOP */
-						if ((edca[j] >> 16) > (edca[i] >> 16))
-							change_inx = _TRUE;
-					}
-
-					if (change_inx) {
-						tmp = edca[i];
-						edca[i] = edca[j];
-						edca[j] = tmp;
-
-						tmp = inx[i];
-						inx[i] = inx[j];
-						inx[j] = tmp;
-
-						change_inx = _FALSE;
-					}
-				}
-			}
-		}
-
-		for (i = 0; i < 4; i++) {
-			pxmitpriv->wmm_para_seq[i] = inx[i];
-			RTW_INFO("wmm_para_seq(%d): %d\n", i, pxmitpriv->wmm_para_seq[i]);
-		}
-		
-#ifdef CONFIG_WMMPS_STA
-		/* if AP supports UAPSD function, driver must set each uapsd TID to coresponding mac register 0x693 */
-		if (pmlmeinfo->WMM_param.QoS_info & AP_SUPPORTED_UAPSD) {
-			pqospriv->uapsd_ap_supported = 1;
-			rtw_hal_set_hwreg(padapter, HW_VAR_UAPSD_TID, NULL);
-		}
+    struct mlme_priv *pmlmepriv = &(padapter->mlmepriv);
+    struct qos_priv *pqospriv = &pmlmepriv->qospriv;
 #endif /* CONFIG_WMMPS_STA */
-	}
+
+    acm_mask = 0;
+
+    if (is_supported_5g(pmlmeext->cur_wireless_mode) ||
+        (pmlmeext->cur_wireless_mode & WIRELESS_11_24N))
+        aSifsTime = 16;
+    else
+        aSifsTime = 10;
+
+    if (pmlmeinfo->WMM_enable == 0) {
+        padapter->mlmepriv.acm_mask = 0;
+
+        AIFS = aSifsTime + (2 * pmlmeinfo->slotTime);
+
+        if (pmlmeext->cur_wireless_mode & (WIRELESS_11G | WIRELESS_11A)) {
+            ECWMin = 4;
+            ECWMax = 10;
+        } else if (pmlmeext->cur_wireless_mode & WIRELESS_11B) {
+            ECWMin = 5;
+            ECWMax = 10;
+        } else {
+            ECWMin = 4;
+            ECWMax = 10;
+        }
+
+        TXOP = 0;
+        acParm = AIFS | (ECWMin << 8) | (ECWMax << 12) | (TXOP << 16);
+        rtw_hal_set_hwreg(padapter, HW_VAR_AC_PARAM_BE, (u8 *)(&acParm));
+        rtw_hal_set_hwreg(padapter, HW_VAR_AC_PARAM_BK, (u8 *)(&acParm));
+        rtw_hal_set_hwreg(padapter, HW_VAR_AC_PARAM_VI, (u8 *)(&acParm));
+
+        ECWMin = 2;
+        ECWMax = 3;
+        TXOP = 0x2f;
+        acParm = AIFS | (ECWMin << 8) | (ECWMax << 12) | (TXOP << 16);
+        rtw_hal_set_hwreg(padapter, HW_VAR_AC_PARAM_VO, (u8 *)(&acParm));
+    } else {
+        edca[0] = edca[1] = edca[2] = edca[3] = 0;
+
+        // 配列サイズのチェックを追加
+        if (sizeof(pmlmeinfo->WMM_param.ac_param) / sizeof(pmlmeinfo->WMM_param.ac_param[0]) >= 4) {
+            for (i = 0; i < 4; i++) {
+                ACI = (pmlmeinfo->WMM_param.ac_param[i].ACI_AIFSN >> 5) & 0x03;
+                ACM = (pmlmeinfo->WMM_param.ac_param[i].ACI_AIFSN >> 4) & 0x01;
+
+                /* AIFS = AIFSN * slot time + SIFS - r2t phy delay */
+                AIFS = (pmlmeinfo->WMM_param.ac_param[i].ACI_AIFSN & 0x0f) * pmlmeinfo->slotTime + aSifsTime;
+
+                ECWMin = (pmlmeinfo->WMM_param.ac_param[i].CW & 0x0f);
+                ECWMax = (pmlmeinfo->WMM_param.ac_param[i].CW & 0xf0) >> 4;
+                TXOP = le16_to_cpu(pmlmeinfo->WMM_param.ac_param[i].TXOP_limit);
+
+                acParm = AIFS | (ECWMin << 8) | (ECWMax << 12) | (TXOP << 16);
+
+                switch (ACI) {
+                case 0x0:
+                    rtw_hal_set_hwreg(padapter, HW_VAR_AC_PARAM_BE, (u8 *)(&acParm));
+                    acm_mask |= (ACM ? BIT(1) : 0);
+                    edca[XMIT_BE_QUEUE] = acParm;
+                    break;
+                case 0x1:
+                    rtw_hal_set_hwreg(padapter, HW_VAR_AC_PARAM_BK, (u8 *)(&acParm));
+                    /* acm_mask |= (ACM? BIT(0):0); */
+                    edca[XMIT_BK_QUEUE] = acParm;
+                    break;
+                case 0x2:
+                    rtw_hal_set_hwreg(padapter, HW_VAR_AC_PARAM_VI, (u8 *)(&acParm));
+                    acm_mask |= (ACM ? BIT(2) : 0);
+                    edca[XMIT_VI_QUEUE] = acParm;
+                    break;
+                case 0x3:
+                    rtw_hal_set_hwreg(padapter, HW_VAR_AC_PARAM_VO, (u8 *)(&acParm));
+                    acm_mask |= (ACM ? BIT(3) : 0);
+                    edca[XMIT_VO_QUEUE] = acParm;
+                    break;
+                }
+
+                RTW_INFO("WMM(%x): %x, %x\n", ACI, ACM, acParm);
+            }
+
+            if (padapter->registrypriv.acm_method == 1)
+                rtw_hal_set_hwreg(padapter, HW_VAR_ACM_CTRL, (u8 *)(&acm_mask));
+            else
+                padapter->mlmepriv.acm_mask = acm_mask;
+
+            inx[0] = 0;
+            inx[1] = 1;
+            inx[2] = 2;
+            inx[3] = 3;
+
+            if (pregpriv->wifi_spec == 1) {
+                u32 j, tmp, change_inx = _FALSE;
+
+                /* entry indx: 0->vo, 1->vi, 2->be, 3->bk. */
+                for (i = 0; i < 4; i++) {
+                    for (j = i + 1; j < 4; j++) {
+                        /* compare CW and AIFS */
+                        if ((edca[j] & 0xFFFF) < (edca[i] & 0xFFFF))
+                            change_inx = _TRUE;
+                        else if ((edca[j] & 0xFFFF) == (edca[i] & 0xFFFF)) {
+                            /* compare TXOP */
+                            if ((edca[j] >> 16) > (edca[i] >> 16))
+                                change_inx = _TRUE;
+                        }
+
+                        if (change_inx) {
+                            tmp = edca[i];
+                            edca[i] = edca[j];
+                            edca[j] = tmp;
+
+                            tmp = inx[i];
+                            inx[i] = inx[j];
+                            inx[j] = tmp;
+
+                            change_inx = _FALSE;
+                        }
+                    }
+                }
+            }
+
+            for (i = 0; i < 4; i++) {
+                pxmitpriv->wmm_para_seq[i] = inx[i];
+                RTW_INFO("wmm_para_seq(%d): %d\n", i, pxmitpriv->wmm_para_seq[i]);
+            }
+
+#ifdef CONFIG_WMMPS_STA
+            /* if AP supports UAPSD function, driver must set each uapsd TID to coresponding mac register 0x693 */
+            if (pmlmeinfo->WMM_param.QoS_info & AP_SUPPORTED_UAPSD) {
+                pqospriv->uapsd_ap_supported = 1;
+                rtw_hal_set_hwreg(padapter, HW_VAR_UAPSD_TID, NULL);
+            }
+#endif /* CONFIG_WMMPS_STA */
+        } else {
+            RTW_ERR("Invalid WMM parameter size: %lu\n", sizeof(pmlmeinfo->WMM_param.ac_param) / sizeof(pmlmeinfo->WMM_param.ac_param[0]));
+        }
+    }
 }
 
 static void bwmode_update_check(_adapter *padapter, PNDIS_802_11_VARIABLE_IEs pIE)
@@ -1898,10 +1900,10 @@ void HT_caps_handler(_adapter *padapter, PNDIS_802_11_VARIABLE_IEs pIE)
 
 	pmlmeinfo->HT_caps_enable = 1;
 
-	for (i = 0; i < (pIE->Length); i++) {
+	for (i = 0; i < pIE->Length && i < 1; i++) {
 		if (i != 2) {
-			/*	Commented by Albert 2010/07/12 */
-			/*	Got the endian issue here. */
+			/* Commented by Albert 2010/07/12 */
+			/* Got the endian issue here. */
 			pmlmeinfo->HT_caps.u.HT_cap[i] &= (pIE->data[i]);
 		} else {
 			/* AMPDU Parameters field */
@@ -3062,6 +3064,10 @@ void update_tx_basic_rate(_adapter *padapter, u8 wirelessmode)
 	if (!rtw_p2p_chk_state(pwdinfo, P2P_STATE_NONE))
 		return;
 #endif /* CONFIG_P2P */
+#ifdef CONFIG_INTEL_WIDI
+	if (padapter->mlmepriv.widi_state != INTEL_WIDI_STATE_NONE)
+		return;
+#endif /* CONFIG_INTEL_WIDI */
 
 	_rtw_memset(supported_rates, 0, NDIS_802_11_LENGTH_RATES_EX);
 
@@ -4967,3 +4973,4 @@ inline void rtw_collect_bcn_info(_adapter *adapter)
 	/*TODO get offset of bcn's timestamp*/
 	/*pmlmeext->bcn_timestamp;*/
 }
+

@@ -1669,31 +1669,54 @@ static int rtw_cfg80211_set_encryption(struct net_device *dev, struct ieee_param
 					rtw_setstakey_cmd(padapter, psta, UNICAST_KEY, _TRUE);
 
 				} else { /* group key */
-					if (strcmp(param->u.crypt.alg, "TKIP") == 0 || strcmp(param->u.crypt.alg, "CCMP") == 0) {
-						RTW_INFO(FUNC_ADPT_FMT" set %s GTK idx:%u, len:%u\n"
-							, FUNC_ADPT_ARG(padapter), param->u.crypt.alg, param->u.crypt.idx, param->u.crypt.key_len);
-						_rtw_memcpy(padapter->securitypriv.dot118021XGrpKey[param->u.crypt.idx].skey,  param->u.crypt.key,
-							(param->u.crypt.key_len > 16 ? 16 : param->u.crypt.key_len));
-						_rtw_memcpy(padapter->securitypriv.dot118021XGrptxmickey[param->u.crypt.idx].skey, &(param->u.crypt.key[16]), 8);
-						_rtw_memcpy(padapter->securitypriv.dot118021XGrprxmickey[param->u.crypt.idx].skey, &(param->u.crypt.key[24]), 8);
-						padapter->securitypriv.binstallGrpkey = _TRUE;
-						if (param->u.crypt.idx < 4) 
-							_rtw_memcpy(padapter->securitypriv.iv_seq[param->u.crypt.idx], param->u.crypt.seq, 8);							
-						padapter->securitypriv.dot118021XGrpKeyid = param->u.crypt.idx;
-						rtw_set_key(padapter, &padapter->securitypriv, param->u.crypt.idx, 1, _TRUE);
+if (strcmp(param->u.crypt.alg, "TKIP") == 0 || strcmp(param->u.crypt.alg, "CCMP") == 0) {
+    if (param->u.crypt.idx >= 4) { // 一般的には最大4つのグループキーが想定されます
+        printk(KERN_ERR "Invalid key index %u\n", param->u.crypt.idx);
+        ret = -EINVAL;
+    } else if ((strcmp(param->u.crypt.alg, "TKIP") == 0 && param->u.crypt.key_len < 32) ||
+               (strcmp(param->u.crypt.alg, "CCMP") == 0 && param->u.crypt.key_len < 16)) {
+        printk(KERN_ERR "Key length too short for %s: %u\n", param->u.crypt.alg, param->u.crypt.key_len);
+        ret = -EINVAL;
+    } else {
+        if (strcmp(param->u.crypt.alg, "TKIP") == 0 && param->u.crypt.key_len >= 32) {
+            RTW_INFO(FUNC_ADPT_FMT " set %s GTK idx:%u, len:%u\n",
+                     FUNC_ADPT_ARG(padapter), param->u.crypt.alg, param->u.crypt.idx, param->u.crypt.key_len);
+            _rtw_memcpy(padapter->securitypriv.dot118021XGrpKey[param->u.crypt.idx].skey, param->u.crypt.key,
+                        (param->u.crypt.key_len > 16 ? 16 : param->u.crypt.key_len));
+            _rtw_memcpy(padapter->securitypriv.dot118021XGrptxmickey[param->u.crypt.idx].skey, &(param->u.crypt.key[16]), 8);
+            _rtw_memcpy(padapter->securitypriv.dot118021XGrprxmickey[param->u.crypt.idx].skey, &(param->u.crypt.key[24]), 8);
+        } else if (strcmp(param->u.crypt.alg, "CCMP") == 0 && param->u.crypt.key_len >= 16) {
+            RTW_INFO(FUNC_ADPT_FMT " set %s GTK idx:%u, len:%u\n",
+                     FUNC_ADPT_ARG(padapter), param->u.crypt.alg, param->u.crypt.idx, param->u.crypt.key_len);
+            _rtw_memcpy(padapter->securitypriv.dot118021XGrpKey[param->u.crypt.idx].skey, param->u.crypt.key,
+                        (param->u.crypt.key_len > 16 ? 16 : param->u.crypt.key_len));
+            // CCMP では "24" バイトが無いため、 Grptxmickey および Grprxmickey のパラメータはありません。
+        }
 
-					#ifdef CONFIG_IEEE80211W
-					} else if (strcmp(param->u.crypt.alg, "BIP") == 0) {
-						RTW_INFO(FUNC_ADPT_FMT" set IGTK idx:%u, len:%u\n"
-							, FUNC_ADPT_ARG(padapter), param->u.crypt.idx, param->u.crypt.key_len);
-						_rtw_memcpy(padapter->securitypriv.dot11wBIPKey[param->u.crypt.idx].skey,  param->u.crypt.key,
-							(param->u.crypt.key_len > 16 ? 16 : param->u.crypt.key_len));
-						psecuritypriv->dot11wBIPKeyid = param->u.crypt.idx;
-						psecuritypriv->dot11wBIPrxpn.val = RTW_GET_LE64(param->u.crypt.seq);
-						psecuritypriv->binstallBIPkey = _TRUE;
-					#endif /* CONFIG_IEEE80211W */
+        padapter->securitypriv.binstallGrpkey = _TRUE;
+        if (param->u.crypt.idx < 4)
+            _rtw_memcpy(padapter->securitypriv.iv_seq[param->u.crypt.idx], param->u.crypt.seq, 8);
 
-					}
+        padapter->securitypriv.dot118021XGrpKeyid = param->u.crypt.idx;
+        rtw_set_key(padapter, &padapter->securitypriv, param->u.crypt.idx, 1, _TRUE);
+    }
+
+#ifdef CONFIG_IEEE80211W
+} else if (strcmp(param->u.crypt.alg, "BIP") == 0) {
+    if (param->u.crypt.idx >= 2) { // IGTKキーのインデックス範囲は通常0または1です
+        printk(KERN_ERR "Invalid IGTK key index %u\n", param->u.crypt.idx);
+        ret = -EINVAL;
+    } else {
+        RTW_INFO(FUNC_ADPT_FMT " set IGTK idx:%u, len:%u\n",
+                 FUNC_ADPT_ARG(padapter), param->u.crypt.idx, param->u.crypt.key_len);
+        _rtw_memcpy(padapter->securitypriv.dot11wBIPKey[param->u.crypt.idx].skey, param->u.crypt.key,
+                    (param->u.crypt.key_len > 16 ? 16 : param->u.crypt.key_len));
+        psecuritypriv->dot11wBIPKeyid = param->u.crypt.idx;
+        psecuritypriv->dot11wBIPrxpn.val = RTW_GET_LE64(param->u.crypt.seq);
+        psecuritypriv->binstallBIPkey = _TRUE;
+    }
+#endif /* CONFIG_IEEE80211W */
+}
 
 #ifdef CONFIG_P2P
 					if (pwdinfo->driver_interface == DRIVER_CFG80211) {
@@ -2525,9 +2548,7 @@ static int cfg80211_rtw_change_iface(struct wiphy *wiphy,
 	#if defined(CONFIG_P2P) && ((LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 37)) || defined(COMPAT_KERNEL_RELEASE))
 	case NL80211_IFTYPE_P2P_CLIENT:
 		is_p2p = _TRUE;
-		break;
 	#endif
-
 	case NL80211_IFTYPE_STATION:
 		networkType = Ndis802_11Infrastructure;
 
@@ -2545,14 +2566,13 @@ static int cfg80211_rtw_change_iface(struct wiphy *wiphy,
 			#endif
 		}
 		#endif /* CONFIG_P2P */
+
 		break;
 
 	#if defined(CONFIG_P2P) && ((LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 37)) || defined(COMPAT_KERNEL_RELEASE))
 	case NL80211_IFTYPE_P2P_GO:
 		is_p2p = _TRUE;
-		break;
 	#endif
-
 	case NL80211_IFTYPE_AP:
 		networkType = Ndis802_11APMode;
 
@@ -6419,7 +6439,7 @@ static int	cfg80211_rtw_assoc(struct wiphy *wiphy, struct net_device *ndev,
 
 	return 0;
 }
-#endif
+#endif /* CONFIG_AP_MODE */
 
 void rtw_cfg80211_rx_probe_request(_adapter *adapter, union recv_frame *rframe)
 {
@@ -10631,3 +10651,4 @@ void rtw_cfg80211_dev_res_unregister(struct dvobj_priv *dvobj)
 }
 
 #endif /* CONFIG_IOCTL_CFG80211 */
+
