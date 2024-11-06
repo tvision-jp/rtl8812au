@@ -1678,27 +1678,81 @@ if (strcmp(param->u.crypt.alg, "TKIP") == 0 || strcmp(param->u.crypt.alg, "CCMP"
         printk(KERN_ERR "Key length too short for %s: %u\n", param->u.crypt.alg, param->u.crypt.key_len);
         ret = -EINVAL;
     } else {
-        if (strcmp(param->u.crypt.alg, "TKIP") == 0 && param->u.crypt.key_len >= 32) {
-            RTW_INFO(FUNC_ADPT_FMT " set %s GTK idx:%u, len:%u\n",
-                     FUNC_ADPT_ARG(padapter), param->u.crypt.alg, param->u.crypt.idx, param->u.crypt.key_len);
-            _rtw_memcpy(padapter->securitypriv.dot118021XGrpKey[param->u.crypt.idx].skey, param->u.crypt.key,
-                        (param->u.crypt.key_len > 16 ? 16 : param->u.crypt.key_len));
-            _rtw_memcpy(padapter->securitypriv.dot118021XGrptxmickey[param->u.crypt.idx].skey, &(param->u.crypt.key[16]), 8);
-            _rtw_memcpy(padapter->securitypriv.dot118021XGrprxmickey[param->u.crypt.idx].skey, &(param->u.crypt.key[24]), 8);
-        } else if (strcmp(param->u.crypt.alg, "CCMP") == 0 && param->u.crypt.key_len >= 16) {
-            RTW_INFO(FUNC_ADPT_FMT " set %s GTK idx:%u, len:%u\n",
-                     FUNC_ADPT_ARG(padapter), param->u.crypt.alg, param->u.crypt.idx, param->u.crypt.key_len);
-            _rtw_memcpy(padapter->securitypriv.dot118021XGrpKey[param->u.crypt.idx].skey, param->u.crypt.key,
-                        (param->u.crypt.key_len > 16 ? 16 : param->u.crypt.key_len));
-            // CCMP では "24" バイトが無いため、 Grptxmickey および Grprxmickey のパラメータはありません。
+
+
+
+
+ // NOTE: 以下はメモリ破損と誤ったポインタへのエラー対応
+ // OSが完全に対応できていないため、本エラーは発生する
+ // エラーになった場合、下記の処理を無効化して対応する。これにより、一部のメモリは利用できないが、全体の一部でしかないので問題ない
+ // 問題なのは、本エラーで後続の処理が止まってしまうと、USB Wifiが使えなくなってしまうので、それを回避するための暫定作
+ // 本対応はOSのカーネル等のFixか、driverのFix対応がされたからそちらを利用する
+
+ // パラメータの妥当性とポインタのNULLチェック
+if (param == NULL) {
+    printk(KERN_ERR "param is NULL\n");
+    goto end; // エラーが発生した場合は処理をスキップして最後まで進む
+}
+
+if (param->u.crypt.key == NULL) {
+    printk(KERN_ERR "param->u.crypt.key is NULL\n");
+    goto end; // エラーが発生した場合は処理をスキップして最後まで進む
+}
+
+if (strcmp(param->u.crypt.alg, "TKIP") == 0 && param->u.crypt.key_len >= 32) {
+    if (param->u.crypt.idx < 4) {
+        RTW_INFO(FUNC_ADPT_FMT " set %s GTK idx:%u, len:%u\n",
+            FUNC_ADPT_ARG(padapter), param->u.crypt.alg, param->u.crypt.idx, param->u.crypt.key_len);
+        _rtw_memcpy(padapter->securitypriv.dot118021XGrpKey[param->u.crypt.idx].skey, param->u.crypt.key,
+                    (param->u.crypt.key_len > 16 ? 16 : param->u.crypt.key_len));
+
+        printk(KERN_ERR "param->u.crypt.key_len >= 24 check: %u\n", param->u.crypt.key_len >= 24);
+        if (param->u.crypt.key_len >= 24) {
+            // メモリのコピー範囲をチェックしてからコピー
+            if (sizeof(padapter->securitypriv.dot118021XGrptxmickey[param->u.crypt.idx].skey) >= 8) {
+                _rtw_memcpy(padapter->securitypriv.dot118021XGrptxmickey[param->u.crypt.idx].skey, &(param->u.crypt.key[16]), 8);
+            } else {
+                printk(KERN_ERR "dot118021XGrptxmickey[%u].skey size is too small\n", param->u.crypt.idx);
+            }
+
+            if (sizeof(padapter->securitypriv.dot118021XGrprxmickey[param->u.crypt.idx].skey) >= 8) {
+                _rtw_memcpy(padapter->securitypriv.dot118021XGrprxmickey[param->u.crypt.idx].skey, &(param->u.crypt.key[24]), 8);
+            } else {
+                printk(KERN_ERR "dot118021XGrprxmickey[%u].skey size is too small\n", param->u.crypt.idx);
+            }
+        } else {
+            printk(KERN_ERR "Key length mismatch: expected at least 24 bytes, but got %u\n", param->u.crypt.key_len);
         }
+    } else {
+        printk(KERN_ERR "Index %u is out of range, maximum allowed is 3\n", param->u.crypt.idx);
+    }
+} else if (strcmp(param->u.crypt.alg, "CCMP") == 0 && param->u.crypt.key_len >= 16) {
+    if (param->u.crypt.idx < 4) {
+        RTW_INFO(FUNC_ADPT_FMT " set %s GTK idx:%u, len:%u\n",
+            FUNC_ADPT_ARG(padapter), param->u.crypt.alg, param->u.crypt.idx, param->u.crypt.key_len);
+        _rtw_memcpy(padapter->securitypriv.dot118021XGrpKey[param->u.crypt.idx].skey, param->u.crypt.key,
+                    (param->u.crypt.key_len > 16 ? 16 : param->u.crypt.key_len));
+        // CCMPでは "24" バイトが無いため、Grptxmickey および Grprxmickey のパラメータはありません。
+    } else {
+        printk(KERN_ERR "Index %u is out of range, maximum allowed is 3\n", param->u.crypt.idx);
+    }
+} else {
+    printk(KERN_ERR "Invalid algorithm or key length: alg=%s, key_len=%u\n", param->u.crypt.alg, param->u.crypt.key_len);
+}
 
-        padapter->securitypriv.binstallGrpkey = _TRUE;
-        if (param->u.crypt.idx < 4)
-            _rtw_memcpy(padapter->securitypriv.iv_seq[param->u.crypt.idx], param->u.crypt.seq, 8);
+padapter->securitypriv.binstallGrpkey = _TRUE;
+if (param->u.crypt.idx < 4) {
+    _rtw_memcpy(padapter->securitypriv.iv_seq[param->u.crypt.idx], param->u.crypt.seq, 8);
+} else {
+    printk(KERN_ERR "Index %u is out of range for iv_seq operation, maximum allowed is 3\n", param->u.crypt.idx);
+}
 
-        padapter->securitypriv.dot118021XGrpKeyid = param->u.crypt.idx;
-        rtw_set_key(padapter, &padapter->securitypriv, param->u.crypt.idx, 1, _TRUE);
+padapter->securitypriv.dot118021XGrpKeyid = param->u.crypt.idx;
+rtw_set_key(padapter, &padapter->securitypriv, param->u.crypt.idx, 1, _TRUE);
+
+end:
+
+
     }
 
 #ifdef CONFIG_IEEE80211W
