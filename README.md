@@ -1,4 +1,4 @@
-CTV調査機器用のNUC13用に修正したUSB Wifi driver。
+CTV調査機器用に修正したUSB Wifi driver。
 
 このGitHubはpublicに公開されているので扱いには注意!
 publicに公開されている理由はCTV調査機器から利用できるようにするため。
