@@ -14455,7 +14455,10 @@ static int rtw_scan_ch_decision(_adapter *padapter, struct rtw_ieee80211_channel
 
 			_rtw_memcpy(&out[j], &in[i], sizeof(struct rtw_ieee80211_channel));
 
-			if (rfctl->channel_set[set_idx].ScanType == SCAN_PASSIVE)
+			/* Only add PASSIVE_SCAN if the regulatory framework (cfg80211)
+			 * also marks this channel as passive (NO_IR). If rtw_regd_apply_flags()
+			 * cleared NO_IR, respect that decision and allow active scan. */
+			if (in[i].flags & RTW_IEEE80211_CHAN_PASSIVE_SCAN)
 				out[j].flags |= RTW_IEEE80211_CHAN_PASSIVE_SCAN;
 
 			j++;
