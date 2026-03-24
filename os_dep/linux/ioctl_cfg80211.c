@@ -3309,9 +3309,11 @@ bypass_p2p_chk:
 	parm.ssid_num = i;
 
 	/* parsing channels, n_channels */
-	RTW_INFO(FUNC_ADPT_FMT "scan n_channels=%d\n", FUNC_ADPT_ARG(padapter), request->n_channels);
+	printk(KERN_INFO "rtw_scan: n_channels=%d\n", request->n_channels);
 	for (i = 0; i < request->n_channels && i < RTW_CHANNEL_SCAN_AMOUNT; i++) {
-		RTW_INFO(FUNC_ADPT_FMT CHAN_FMT"\n", FUNC_ADPT_ARG(padapter), CHAN_ARG(request->channels[i]));
+		printk(KERN_INFO "rtw_scan: ch=%u flags=0x%x\n",
+			request->channels[i]->hw_value,
+			request->channels[i]->flags);
 		parm.ch[i].hw_value = request->channels[i]->hw_value;
 		parm.ch[i].flags = request->channels[i]->flags;
 	}
