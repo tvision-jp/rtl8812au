@@ -14440,23 +14440,12 @@ static int rtw_scan_ch_decision(_adapter *padapter, struct rtw_ieee80211_channel
 		if (0)
 			RTW_INFO(FUNC_ADPT_FMT" "CHAN_FMT"\n", FUNC_ADPT_ARG(padapter), CHAN_ARG(&in[i]));
 
-		if (!in[i].hw_value || (in[i].flags & RTW_IEEE80211_CHAN_DISABLED)) {
-			if (in[i].hw_value < 35)
-				printk(KERN_INFO "rtw_decision: 2.4G ch=%u SKIP disabled/zero flags=0x%x\n",
-					in[i].hw_value, in[i].flags);
+		if (!in[i].hw_value || (in[i].flags & RTW_IEEE80211_CHAN_DISABLED))
 			continue;
-		}
-		if (rtw_mlme_band_check(padapter, in[i].hw_value) == _FALSE) {
-			if (in[i].hw_value < 35)
-				printk(KERN_INFO "rtw_decision: 2.4G ch=%u SKIP band_check setband=%d\n",
-					in[i].hw_value, padapter->setband);
+		if (rtw_mlme_band_check(padapter, in[i].hw_value) == _FALSE)
 			continue;
-		}
 
 		set_idx = rtw_chset_search_ch(rfctl->channel_set, in[i].hw_value);
-		if (in[i].hw_value < 35)
-			printk(KERN_INFO "rtw_decision: 2.4G ch=%u set_idx=%d\n",
-				in[i].hw_value, set_idx);
 		if (set_idx >= 0) {
 			if (j >= out_num) {
 				RTW_PRINT(FUNC_ADPT_FMT" out_num:%u not enough\n",
