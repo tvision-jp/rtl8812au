@@ -14455,11 +14455,11 @@ static int rtw_scan_ch_decision(_adapter *padapter, struct rtw_ieee80211_channel
 
 			_rtw_memcpy(&out[j], &in[i], sizeof(struct rtw_ieee80211_channel));
 
-			/* Only add PASSIVE_SCAN if the regulatory framework (cfg80211)
-			 * also marks this channel as passive (NO_IR). If rtw_regd_apply_flags()
-			 * cleared NO_IR, respect that decision and allow active scan. */
-			if (in[i].flags & RTW_IEEE80211_CHAN_PASSIVE_SCAN)
-				out[j].flags |= RTW_IEEE80211_CHAN_PASSIVE_SCAN;
+			/* kernel 6.x re-applies IEEE80211_CHAN_NO_IR (=RTW_IEEE80211_CHAN_PASSIVE_SCAN)
+			 * to 5GHz channels via regulatory enforcement even after rtw_regd_apply_flags()
+			 * clears it. Explicitly clear here so the driver performs active scan on all
+			 * non-disabled channels, consistent with the intent of rtw_regd_apply_flags(). */
+			out[j].flags &= ~RTW_IEEE80211_CHAN_PASSIVE_SCAN;
 
 			j++;
 		}
@@ -14485,9 +14485,7 @@ static int rtw_scan_ch_decision(_adapter *padapter, struct rtw_ieee80211_channel
 				}
 
 				out[j].hw_value = chan;
-
-				if (rfctl->channel_set[i].ScanType == SCAN_PASSIVE)
-					out[j].flags |= RTW_IEEE80211_CHAN_PASSIVE_SCAN;
+				/* Do not set PASSIVE_SCAN: active scan on all channels */
 
 				j++;
 			}
